@@ -9,20 +9,41 @@
 
 #include "TestData.h"
 
+//enum class JsonType : int
+//{
+//    OBJECT, ARRAY, STRING, INT, FLOAT, BOOLEAN, JNULL
+//};
+
+//state machine like
+
+//struct Field
+//{
+//    JsonType fieldType;
+//    std::string tag;
+//
+//    union
+//    {
+//        std::string str;
+//        long long iNum;
+//        double fNum;
+//        bool boolean;
+//        nullptr_t null;
+//        //A() { memset(this, 0, sizeof(A)); } //neden???
+//    } field;
+//    //union konabilir yada variant
+//};  
+
+//C style
+//struct Field
+//{
+//    JsonType fieldType;
+//    std::string tag;
+//    std::string value;
+//};
+
 
 static std::map<std::string, std::string> json_mapper(const std::string& json);
 
-
-int main2()
-{
-    std::map<std::string, std::string> tagValue = json_mapper(withoutInner);
-
-    for (const auto& [tag, value] : tagValue)
-    {
-        std::cout << tag << " : " << value << "\n";
-    }
-    return 0;
-}
 
 static const char* specialTokens[] = {"null" , "true", "false"};
 

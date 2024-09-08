@@ -18,14 +18,14 @@ std::ostream& operator<<(std::ostream& os, const std::pair<const Key, Value>& p)
 template<typename Key, typename Value >
 std::ostream& operator<<(std::ostream& os, const std::map<Key, Value>& m)
 {
-	os << "[ "; // 1
+	//os << "[ "; // 1
 
 	for (const auto& [k, v] : m)
 	{
-		os << k << " : " << v << ", "; // 2
+		os << k << " : " << v << "\n"; // 2
 	}
 
-	os << "]"; // 3
+	//os << "]"; // 3
 
 	return os;
 }
@@ -33,14 +33,14 @@ std::ostream& operator<<(std::ostream& os, const std::map<Key, Value>& m)
 template<typename Key, typename Value >
 std::ostream& operator<<(std::ostream& os, const std::unordered_map<Key, Value>& m)
 {
-	os << "[ "; // 1
+	//os << "[ "; // 1
 
 	for (const auto& [k, v] : m)
 	{
-		os << k << " : " << v << ", "; // 2
+		os << k << " : " << v << "\n"; // 2
 	}
 
-	os << "]"; // 3
+	//os << "]"; // 3
 
 	return os;
 }

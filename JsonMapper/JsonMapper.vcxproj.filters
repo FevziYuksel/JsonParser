@@ -21,9 +21,6 @@
     <ClCompile Include="JsonParser2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ObjectOriented.cpp">
       <Filter>Header Files</Filter>
     </ClCompile>

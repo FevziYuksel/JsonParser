@@ -131,7 +131,6 @@
     <ClCompile Include="JsonParser1.cpp" />
     <ClCompile Include="JsonParser2.cpp" />
     <ClCompile Include="ObjectOriented.cpp" />
-    <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="GenericPrinter.h" />

@@ -1,38 +1,24 @@
 ﻿#include "TestData.h"
 #include "Utility.h";
 
+struct JObject;
+struct JArray;
 
-enum class JsonType : int
-{
-    OBJECT, ARRAY, STRING, INT, FLOAT, BOOLEAN, JNULL
+using TagType = std::string;
+using JsonType = std::variant<std::string, JObject, JArray, std::int64_t, std::double_t, bool, nullptr_t>;
+using TokenMap = std::map<TagType, JsonType>;
+
+
+struct JArray {
+    std::vector<JsonType> vec;
 };
 
-//state machine like
+struct JObject {
+    std::map<TagType, JsonType> map;
+};
 
-struct Field
-{
-    JsonType fieldType;
-    std::string tag;
 
-    union A
-    {
-        std::string str;
-        long long iNum;
-        double fNum;
-        bool boolean;
-        nullptr_t null;
-        A() { memset(this, 0, sizeof(A)); } //neden???
-    };
-    //union konabilir yada variant
-};  
-
-//C style
-//struct JObject
-//{
-//    JsonType fieldType;
-//    std::string tag;
-//    std::string value;
-//};
+std::variant<std::string, JObject, JArray, std::int64_t, std::double_t, bool, nullptr_t> tokens;
 
 
 
@@ -74,17 +60,9 @@ std::string clear_spaces(const std::string& json)
 }
 
 
-using tokenMap = std::unordered_map< std::string, std::string>;
-
-
 bool is_object(char first, char second)
 {
     return (',' == first && '{' == second);
-}
-
-bool is_object(const std::string& token)
-{
-    return (R"(,{)" == token);
 }
 
 bool is_array(char first, char second)
@@ -92,29 +70,16 @@ bool is_array(char first, char second)
     return (':' == first && '[' == second);
 }
 
-bool is_array(const std::string& token)
-{
-    return (R"(:[)" == token);
-}
 
 bool is_tag(char first, char second)
 {
     return ('{' == first && '"' == second) || (',' == first && '"' == second);
 }
 
-bool is_tag(const std::string& token)
-{
-    return (R"({")" == token || R"(,")" == token);
-}
 
 bool is_string(char first, char second)
 {
     return (':' == first && '"' == second);
-}
-
-bool is_string(const std::string& token)
-{
-    return (R"(:")" == token);
 }
 
 bool is_number(char first, char second)
@@ -126,10 +91,6 @@ bool is_literal(char first, char second)
 {
     return (':' == first && ('t' == second || 'f' == second || 'n' == second));
 }
-//bool is_null(char first, char second)
-//{
-//    return (':' == first && 'n' == second);
-//}
 
 bool end_value(char first)
 {
@@ -141,14 +102,8 @@ bool end_str(char first)
     return ('"' != first);
 }
 
-void insert2map(tokenMap& map, std::string& tag, std::string& value)
-{
-    map[tag] = value;
-    tag.clear();
-    value.clear();
-}
 
-std::string parse_tag(const std::string& json, size_t& i)
+TagType parse_tag(const std::string& json, size_t& i)
 {
     std::string tag;
     for (i += 2; end_str(json[i]); i++)
@@ -159,7 +114,7 @@ std::string parse_tag(const std::string& json, size_t& i)
     return tag;
 }
 
-std::string parse_string(const std::string& json, size_t& i)
+JsonType parse_string(const std::string& json, size_t& i)
 {
     std::string value;
     for (i += 2; end_str(json[i]); i++)
@@ -170,19 +125,27 @@ std::string parse_string(const std::string& json, size_t& i)
     return value;
 }
 
-std::string parse_number(const std::string& json, size_t& i)
+JsonType parse_number(const std::string& json, size_t& i)
 {
     std::string value;
+    bool isFloat = false;
+
     for (i += 1; !end_value(json[i]); i++)
     {
         ASSERT(!(std::isdigit(json[i]) || '.' == json[i]), "non numeric value");
+        if ('.' == json[i])
+        {
+            isFloat = true;
+        }
+
         value += json[i];
     }
     --i;
-    return value;
+
+    return isFloat ? Utility::str_to_double(value) : Utility::str_to_int64(value);
 }
 
-std::string parse_literal(const std::string& json, size_t& i)
+JsonType parse_literal(const std::string& json, size_t& i)
 {
     std::string value;
     for (i += 1; !end_value(json[i]); i++)
@@ -190,28 +153,32 @@ std::string parse_literal(const std::string& json, size_t& i)
         value += json[i];
     }
     --i;
-    ASSERT(!("true" == value || "false" == value), "not bool");
-    ASSERT("null" != value, "not null");
-    return value;
+    
+    if ("true" == value)
+    {
+        return true;
+    } 
+
+    if ("false" == value)
+    {
+        return false;
+    }
+
+    if ("null" == value)
+    {
+        return nullptr;
+    }
+
+    throw std::runtime_error("");
 }
 
-//std::string parse_null(const std::string& json, size_t& i)
-//{
-//    std::string value;
-//    for (i += 1; !end_value(json[i]); i++)
-//    {
-//        value += json[i];
-//    }
-//    --i;
-//    ASSERT("null" != value, "not null");
-//    return value;
-//}
 
 //array'deki virgülleri say vector'ü ona göre aç sonra değerleri move'la
-std::string parse_array(const std::string& json, size_t& i)
+JsonType parse_array(const std::string& json, size_t& i)
 {
-    std::string value;
-    std::vector<std::string> vec;
+    JsonType value;
+    JArray j;
+    std::vector<JsonType>& vec = j.vec;
     for (i += 2; ']' != json[i]; i++)
     {
         switch (json[i])
@@ -254,70 +221,106 @@ std::string parse_array(const std::string& json, size_t& i)
         }
     }
     vec.emplace_back(std::move(value));
-    //LOG(vec);
-    return vec2string(vec);
+    return j;
 }
 
-tokenMap parse_object(const std::string& json, size_t& i)
+JsonType parse_object(const std::string& json, size_t& i)
 {
     std::string tag, value;
-    tokenMap map;
+    JObject obj;
+    TokenMap& map = obj.map;
 
     for (; i < json.size() - 1; i++)
     {
-        if (!is_object(json[i], json[i + 1]) && is_tag(json[i], json[i + 1])) //todo tag ile string aynı olabilir 
+        if (is_object(json[i], json[i + 1]))
+        {
+            ASSERT(tag.empty(), "tag is empty");
+            map[tag] = parse_object(json, i);
+        }
+
+        if (is_tag(json[i], json[i + 1])) //todo tag ile string aynı olabilir 
         {
             ASSERT(!value.empty(), "value cannot be come before");
             tag = parse_tag(json, i);
             //todo Tag'i map'e move'la sonra value'yu
         }
 
+        ASSERT(tag.empty(), "tag is empty");
+
         if (is_string(json[i], json[i + 1]))
         {
-            ASSERT(tag.empty(), "tag is empty");
-            value = parse_string(json, i);
-            insert2map(map, tag, value);
+            map[tag] = parse_string(json, i);
         }
 
         if (is_number(json[i], json[i + 1]))
         {
-            ASSERT(tag.empty(), "tag is empty");
-            value = parse_number(json, i);
-            insert2map(map, tag, value);
+            map[tag] = parse_number(json, i);
         }
 
         if (is_literal(json[i], json[i + 1]))
         {
-            ASSERT(tag.empty(), "tag is empty");
-            value = parse_literal(json, i);
-            insert2map(map, tag, value);
-        }
-
-        if (is_object(json[i], json[i + 1]))
-        {
-            ASSERT(tag.empty(), "tag is empty");
-            auto m = parse_object(json, i);
-            LOG(m);
-            value = "OBJECT";
-            insert2map(map, tag, value);
+            map[tag] = parse_literal(json, i);;
         }
 
         if (is_array(json[i], json[i + 1]))
         {
-            ASSERT(tag.empty(), "tag is empty");
-            value = parse_array(json, i);
-            insert2map(map, tag, value);
+            map[tag] = parse_array(json, i);
         }
     }
 
-    return map;
+    return obj;
 }
 
 //{"name":"John Smith","age":30,"money":50.55,"isStudent":false,"null":null}
-tokenMap tokenize(const std::string& json)
+JsonType tokenize(const std::string& json)
 {
     size_t i = 0;
-    return parse_object(json, i);
+    return parse_object(clear_spaces(json), i);
+}
+
+void print_all(JsonType v);
+
+struct PrintVisitor {
+    void operator()(nullptr_t value) const {
+        std::cout << "null: " << value << "\n";
+    }
+
+    void operator()(bool value) const {
+        std::cout << "bool: " << value << "\n";
+    }
+
+    void operator()(int64_t value) const {
+        std::cout << "int64: " << value << "\n";
+    }
+
+    void operator()(double_t value) const {
+        std::cout << "double: " << value << "\n";
+    }
+
+    void operator()(const std::string& value) const {
+        std::cout << "string: " << value << "\n";
+    }
+
+    void operator()(const JArray& value) const {
+        std::cout << "array: " << "\n";
+        //for (const auto& e : value.vec)
+        //{
+        //    std::visit(PrintVisitor(), e);
+        //}
+    }
+
+    void operator()(const JObject& value) const {
+        std::cout << "object: " << std::endl;
+        //for (const auto& [k, v] : value.map)
+        //{
+        //    print_all(value);
+        //}
+    }
+};
+
+void print_all(JsonType v)
+{
+    std::visit(PrintVisitor(), v);
 }
 
 
@@ -325,8 +328,8 @@ int main()
 {
     const std::string exp2 = R"(
     {
-      //"1memberShips" : ["a", "b"],
-      //"2numbers" : [1, 2, 3, 5],
+      "1memberShips" : ["a", "b"],
+      "2numbers" : [1, 2, 3, 5],
       "3strVal": "John Smith",
       "4intVal": 30,
       "5floatVal": 50.55,
@@ -341,11 +344,18 @@ int main()
     })";
 
 
+    JsonType v = tokenize(R"({ "name":"John Smith","age" : 30,"money" : 50.55,"isStudent" : false,"null" : null })");
+    JObject o = std::get<JObject>(v);
+    for (const auto& [k, v] : o.map)
+    {
+        std::cout << k << " => ";
+        std::visit(PrintVisitor(), v);
+    }
+    std::cout << std::endl;
 
-    std::string v = clear_spaces(exp2);
-    LOG(v);
-    auto m = tokenize(v);
-    LOG(m);
+
+    //LOG(m);
+    return 0;
 }
 
 
@@ -358,10 +368,6 @@ int main()
 
 //dönüş değerlerini JToken yap, indexleri de tuple şeklinde dönersin
 
-//JToken base class altına JArray vs 
-//Jtoken variant olacak 
-//Direk Map için'de tut sonra switch ile ayır (C tarzı)
-
 //C++ string_view kullan substring ile
 //C tarzı switch ile char ve pass_empty
 
@@ -370,3 +376,11 @@ int main()
 //Düzgün bi şekilde dönüş değeri lazım
 //Algoritmanın toparlanması lazım tokenların özellikle
 //ileri geri atma durumu kaldır switch'e çevir switch yaptıktan sonra bi sonraki değere baksın
+
+
+//OLASI Json field
+//En basiti önce parse'layıp sonra dönüştürülebir.
+//Her tip için ayrı vector açıp tutulabilir cache locality için en iyis
+//Tagged Union ile 
+//std::variant 
+//object oriented gidilip her tipe class 
