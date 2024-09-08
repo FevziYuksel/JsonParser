@@ -1,5 +1,7 @@
 ﻿#include "TestData.h"
 #include "Utility.h";
+#include "Predicates.h";
+
 
 struct JObject;
 struct JArray;
@@ -7,6 +9,8 @@ struct JArray;
 using TagType = std::string;
 using JsonType = std::variant<std::string, JObject, JArray, std::int64_t, std::double_t, bool, nullptr_t>;
 using TokenMap = std::map<TagType, JsonType>;
+
+JsonType parse_object(const std::string& json, size_t& i);
 
 
 struct JArray {
@@ -18,88 +22,30 @@ struct JObject {
 };
 
 
-std::variant<std::string, JObject, JArray, std::int64_t, std::double_t, bool, nullptr_t> tokens;
-
-
-
 std::string clear_spaces(const std::string& json)
 {
-    int strStart = 0;
-    int commented = 0;
     std::string replacement;
+    int count = 0;
+
     for (size_t i = 0; i < json.size(); ++i)
     {
-        char c = json[i];
-        switch (json[i])
+        if ('/' == json[i] && i + 1 < json.size() && '/' == json[i + 1])
         {
-            case '"':
-            {
-                ++strStart;
-                strStart %= 2;
-                replacement += json[i];
-                break;
-            }
-            case '/':
-            {
-                if ('/' == json[++i])
-                {
-                    for (; '\n' != json[i]; ++i);
-                }
-                break;
-            }
-            default:
-            {
-                if (!std::isspace(json[i]) || 1 == strStart || '"' == json[i])
-                {
-                    replacement += json[i];
-                }
-            }
+            for (; i < json.size() && '\n' != json[i]; ++i);
+        }
+
+        if ('"' == json[i] && '\\' != json[i])
+        {
+            ++count;
+            count %= 2;
+        }
+
+        if (count || !std::isspace(json[i]))
+        {
+            replacement += json[i];
         }
     }
     return replacement;
-}
-
-
-bool is_object(char first, char second)
-{
-    return (',' == first && '{' == second);
-}
-
-bool is_array(char first, char second)
-{
-    return (':' == first && '[' == second);
-}
-
-
-bool is_tag(char first, char second)
-{
-    return ('{' == first && '"' == second) || (',' == first && '"' == second);
-}
-
-
-bool is_string(char first, char second)
-{
-    return (':' == first && '"' == second);
-}
-
-bool is_number(char first, char second)
-{
-    return (':' == first && std::isdigit(second));
-}
-
-bool is_literal(char first, char second)
-{
-    return (':' == first && ('t' == second || 'f' == second || 'n' == second));
-}
-
-bool end_value(char first)
-{
-    return (',' == first || '}' == first || ']' == first);
-}
-
-bool end_str(char first)
-{
-    return ('"' != first);
 }
 
 
@@ -132,17 +78,24 @@ JsonType parse_number(const std::string& json, size_t& i)
 
     for (i += 1; !end_value(json[i]); i++)
     {
-        ASSERT(!(std::isdigit(json[i]) || '.' == json[i]), "non numeric value");
         if ('.' == json[i])
         {
             isFloat = true;
+        } 
+        else if (std::isdigit(json[i]))
+        {
+            value += json[i];
         }
-
-        value += json[i];
+        else
+        {
+            throw std::runtime_error("not a literal");
+        }
     }
     --i;
 
-    return isFloat ? Utility::str_to_double(value) : Utility::str_to_int64(value);
+    return isFloat 
+        ? Utility::str_to_double(value) 
+        : Utility::str_to_int64(value);
 }
 
 JsonType parse_literal(const std::string& json, size_t& i)
@@ -169,7 +122,7 @@ JsonType parse_literal(const std::string& json, size_t& i)
         return nullptr;
     }
 
-    throw std::runtime_error("");
+    throw std::runtime_error("not a literal");
 }
 
 
@@ -185,42 +138,39 @@ JsonType parse_array(const std::string& json, size_t& i)
         {
             case '"':
             {
-                value = parse_string(json, --i);
-                vec.emplace_back(std::move(value));
+                vec.emplace_back(std::move(parse_string(json, --i)));
             }
 
             break;
             case '[':
             {
-                value = parse_array(json, i);
-                vec.emplace_back(std::move(value));
+                vec.emplace_back(std::move(parse_array(json, i)));
                 break;
             }
             case '{':
             {
-               /* auto m = parse_object(json, i);
-                LOG(m);*/
-                value = "OBJECT";
-                vec.emplace_back(std::move(value));
+                vec.emplace_back(std::move(parse_object(json, i)));
                 break;
             }
             default:
             {
                 if (std::isdigit(json[i]))
                 {
-                    value = parse_number(json, --i);
-                    vec.emplace_back(std::move(value));
+                    vec.emplace_back(std::move(parse_number(json, --i)));
                 }
-
-                if (('t' == json[i] || 'f' == json[i]) || 'n' == json[i])
+                else if ('t' == json[i] || 'f' == json[i] || 'n' == json[i])
                 {
-                    value = parse_literal(json, --i);
-                    vec.emplace_back(std::move(value));
+                    vec.emplace_back(std::move(parse_literal(json, --i)));
+                }
+                else
+                {
+                    throw std::runtime_error("error");
                 }
             }
         }
     }
-    vec.emplace_back(std::move(value));
+
+
     return j;
 }
 
@@ -230,7 +180,7 @@ JsonType parse_object(const std::string& json, size_t& i)
     JObject obj;
     TokenMap& map = obj.map;
 
-    for (; i < json.size() - 1; i++)
+    for (int j = 0; i < json.size() - 1; i++, j++)
     {
         if (is_object(json[i], json[i + 1]))
         {
@@ -238,9 +188,9 @@ JsonType parse_object(const std::string& json, size_t& i)
             map[tag] = parse_object(json, i);
         }
 
-        if (is_tag(json[i], json[i + 1])) //todo tag ile string aynı olabilir 
+        if (is_tag(json[i], json[i + 1])) //is_object üstte olması lazım
         {
-            ASSERT(!value.empty(), "value cannot be come before");
+            ASSERT(!value.empty(), "value cannot come before");
             tag = parse_tag(json, i);
             //todo Tag'i map'e move'la sonra value'yu
         }
@@ -266,6 +216,17 @@ JsonType parse_object(const std::string& json, size_t& i)
         {
             map[tag] = parse_array(json, i);
         }
+
+        //if (is_commented_line(json[i], json[i + 1])) //BROKEN
+        //{
+        //    for (; i < json.size() - 1 && '\n' != json[i]; i++); //Skip function
+        //    LOG(json[i]);
+        //}
+
+        //if (std::isspace(json[i]))  //BROKEN
+        //{
+        //    for (; i < json.size() - 1 && !std::isspace(json[i]); i++); //Skip function
+        //}
     }
 
     return obj;
@@ -343,8 +304,15 @@ int main()
         "memberShips" : ["fevzi", "yuksel"]
     })";
 
+    const std::string e = R"({ 
+            //"name":"John Smith",
+            "age" : 30,"money" : 50.55,
+            "isStudent" : false,
+            "null" : null 
+    })";
 
-    JsonType v = tokenize(R"({ "name":"John Smith","age" : 30,"money" : 50.55,"isStudent" : false,"null" : null })");
+      
+    JsonType v = tokenize(e);
     JObject o = std::get<JObject>(v);
     for (const auto& [k, v] : o.map)
     {
@@ -353,8 +321,6 @@ int main()
     }
     std::cout << std::endl;
 
-
-    //LOG(m);
     return 0;
 }
 
@@ -373,7 +339,6 @@ int main()
 
 //Array bozuk
 //Object olmadı
-//Düzgün bi şekilde dönüş değeri lazım
 //Algoritmanın toparlanması lazım tokenların özellikle
 //ileri geri atma durumu kaldır switch'e çevir switch yaptıktan sonra bi sonraki değere baksın
 

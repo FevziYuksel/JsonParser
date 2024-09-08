@@ -11,6 +11,7 @@
 #include <ranges>
 #include <variant>
 #include <cinttypes>
+#include <functional>
 
 #include "GenericPrinter.h"
 
@@ -49,9 +50,10 @@ namespace Utility {
         return num;
     }
 
-    std::string int64_to_str(int64_t num)
+    template< typename T>
+    std::string num_tostr(T any)
     {
-        return std::to_string(num);
+        return std::to_string(any);
     }
 
     double_t str_to_double(const std::string& str)
@@ -71,9 +73,41 @@ namespace Utility {
         return num;
     }
 
-    std::string double_to_str(double_t num)
+    std::string clear_spaces(const std::string& json)
     {
-        return std::to_string(num);
+        int strStart = 0;
+        int commented = 0;
+        std::string replacement;
+        for (size_t i = 0; i < json.size(); ++i)
+        {
+            char c = json[i];
+            switch (json[i])
+            {
+            case '"':
+            {
+                ++strStart;
+                strStart %= 2;
+                replacement += json[i];
+                break;
+            }
+            case '/':
+            {
+                if ('/' == json[++i])
+                {
+                    for (; '\n' != json[i]; ++i);
+                }
+                break;
+            }
+            default:
+            {
+                if (!std::isspace(json[i]) || 1 == strStart || '"' == json[i])
+                {
+                    replacement += json[i];
+                }
+            }
+            }
+        }
+        return replacement;
     }
 }
 
@@ -104,6 +138,9 @@ std::string vec2string(const std::vector<std::string>& vec)
     }
     return ss.str();
 }
+
+
+
 
 
 
